@@ -29,6 +29,7 @@ void	ft_send_pid(int pid)
 		else
 			kill(pid, SIGUSR2);
 		i++;
+		usleep(100);
 	}
 }
 
@@ -45,6 +46,7 @@ void	ft_send(int pid, unsigned char send)
 		else
 			kill(pid, SIGUSR2);
 		i++;
+		usleep(100);
 	}
 }
 

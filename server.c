@@ -62,6 +62,7 @@ int	main(void)
 	signal(SIGUSR2, ft_handler);
 	while (1)
 	{
+		pause();
 	}
 	return (0);
 }
