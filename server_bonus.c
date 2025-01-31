@@ -1,12 +1,12 @@
 /* ************************************************************************** */
 /*                                                                            */
 /*                                                        :::      ::::::::   */
-/*   server.c                                           :+:      :+:    :+:   */
+/*   server_bonus.c                                     :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
 /*   By: syanak <syanak@student.42kocaeli.com.tr >  +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
-/*   Created: 2025/01/31 19:07:37 by syanak            #+#    #+#             */
-/*   Updated: 2025/01/31 19:07:39 by syanak           ###   ########.fr       */
+/*   Created: 2025/01/31 19:07:58 by syanak            #+#    #+#             */
+/*   Updated: 2025/01/31 19:09:41 by syanak           ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -20,7 +20,7 @@ void	ft_putnbr(int n)
 	write(1, &"0123456789"[n % 10], 1);
 }
 
-void	ft_write_message(int client_signal)
+int	ft_write_message(int client_signal)
 {
 	static int	bit_message = 1;
 	static int	message = 0;
@@ -33,8 +33,34 @@ void	ft_write_message(int client_signal)
 		write(1, &message, 1);
 		bit_message = 1;
 		if (message == 0)
-			write(1, "\n", 1);
+			return (write(1, "\n", 1), 1);
 		message = 0;
+	}
+	return (0);
+}
+
+void	ft_handler(int client_signal)
+{
+	static int	bit_pid = 0;
+	static int	client_pid = 0;
+	int			control;
+
+	control = 0;
+	if (bit_pid < 32)
+	{
+		if (client_signal == SIGUSR1)
+			client_pid += 1 << bit_pid;
+		bit_pid++;
+	}
+	else
+	{
+		control = ft_write_message(client_signal);
+		if (control)
+		{
+			kill(client_pid, SIGUSR1);
+			bit_pid = 0;
+			client_pid = 0;
+		}
 	}
 }
 
@@ -42,8 +68,8 @@ int	main(void)
 {
 	ft_putnbr(getpid());
 	write(1, "\n", 1);
-	signal(SIGUSR1, ft_write_message);
-	signal(SIGUSR2, ft_write_message);
+	signal(SIGUSR1, ft_handler);
+	signal(SIGUSR2, ft_handler);
 	while (1)
 	{
 		usleep(10);
