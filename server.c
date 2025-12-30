@@ -1,53 +1,63 @@
-/* ************************************************************************** */
-/*                                                                            */
-/*                                                        :::      ::::::::   */
-/*   server.c                                           :+:      :+:    :+:   */
-/*                                                    +:+ +:+         +:+     */
-/*   By: syanak <syanak@student.42kocaeli.com.tr >  +#+  +:+       +#+        */
-/*                                                +#+#+#+#+#+   +#+           */
-/*   Created: 2025/01/31 19:07:37 by syanak            #+#    #+#             */
-/*   Updated: 2025/01/31 19:07:39 by syanak           ###   ########.fr       */
-/*                                                                            */
-/* ************************************************************************** */
-
-#include <signal.h>
 #include <unistd.h>
+#include <signal.h>
 
-void	ft_putnbr(int n)
+static int get_client_pid(char *str)
 {
-	if (n > 9)
-		ft_putnbr(n / 10);
-	write(1, &"0123456789"[n % 10], 1);
+	int pid = 0;
+	while (*str)
+	{
+		if (*str >= '0' && *str <= '9')
+		{
+			write(1, "Invalid PID\n", 12);
+			return (0);
+		}
+		pid = pid * 10 + (*str - '0');
+		str++;
+	}
+	return (pid);
 }
 
-void	ft_write_message(int client_signal)
+static void send_message(int pid, char *str)
 {
-	static int	bit_message = 1;
-	static int	message = 0;
-
-	if (client_signal == SIGUSR1)
-		message += bit_message;
-	bit_message *= 2;
-	if (bit_message == 256)
+	int i;
+	char c;
+	while (*str)
 	{
-		write(1, &message, 1);
-		bit_message = 1;
-		if (message == 0)
-			write(1, "\n", 1);
-		message = 0;
+		c = *str;
+		i = 0;
+		while (i < 7)
+		{
+			if (c & (1 << i))
+			{
+				if (kill(pid, SIGUSR1) == -1)
+				{
+					write(1, "Failed to send signal\n", 22);
+					return ;
+				}
+			}
+			else
+			{
+				if (kill(pid, SIGUSR2) == -1)
+				{
+					write(1, "Failed to send signal\n", 22);
+					return ;
+				}
+			}
+			usleep(100);
+			i++;
+		}
+		str++;
 	}
 }
 
-int	main(void)
+int main(int ac, char **av)
 {
-	ft_putnbr(getpid());
-	write(1, "\n", 1);
-	signal(SIGUSR1, ft_write_message);
-	signal(SIGUSR2, ft_write_message);
-	while (1)
-	{
-		usleep(10);
-		pause();
-	}
+	if (ac < 2)
+		return (0);
+	int pid;
+
+	pid = get_client_pid(av[1]);
+	if (pid)
+		send_message(pid, av[2]);
 	return (0);
 }
