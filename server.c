@@ -1,7 +1,7 @@
 #include <signal.h>
 #include <unistd.h>
 
-static int	g_client_pid = 0;
+int		g_client_pid = 0;
 
 void	print_pid(int pid)
 {
@@ -35,7 +35,6 @@ void	receive_pid(int sig)
 		g_client_pid = pid;
 		pid = 0;
 		bit = 32;
-		print_pid(g_client_pid);
 		kill(g_client_pid, SIGUSR1);
 	}
 }
@@ -80,5 +79,5 @@ int	main(void)
 	signal(SIGUSR1, handle_signal);
 	signal(SIGUSR2, handle_signal);
 	while (1)
-		;
+		pause();
 }
