@@ -1,6 +1,24 @@
 #include <signal.h>
 #include <unistd.h>
 
+void	handle_message(int signal, int *client_pid)
+{
+	static char	bit = 8;
+	static char byte = 0;
+
+	if (signal == SIGUSR1)
+		byte =  byte | (1 << bit);
+	bit--;
+	if (bit == 0)
+	{
+		bit = 8;
+		write(1, &byte, 1);
+		if (byte == 0)
+			*client_pid = 0;
+		byte = 0;
+	}
+}
+
 void	print_pid(int pid)
 {
 	char	buffer[20];
@@ -37,6 +55,11 @@ int	handle_client_signal(int signal, int *client_pid)
 	return (0);
 }
 
+void	hand_shake(int client_pid)
+{
+	kill(SIGUSR1, client_pid);
+}
+
 void	handle_signal(int signal)
 {
 	static int	client_pid = 0;
@@ -45,6 +68,8 @@ void	handle_signal(int signal)
 	{
 		// client e selam yollamalıyım testingen doğru - li kısımlarıa bakıcam
 		print_pid(client_pid);
+		handle_message(signal, &client_pid);
+		hand_shake(client_pid);
 	}
 }
 
