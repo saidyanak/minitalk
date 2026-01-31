@@ -1,63 +1,61 @@
-#include <unistd.h>
 #include <signal.h>
+#include <unistd.h>
 
-static int get_client_pid(char *str)
+void	print_pid(int pid)
 {
-	int pid = 0;
-	while (*str)
+	char	buffer[20];
+	int		len;
+	int		temp;
+
+	write(1, "PID: ", 5);
+	len = 0;
+	temp = pid;
+	while (temp)
 	{
-		if (*str >= '0' && *str <= '9')
-		{
-			write(1, "Invalid PID\n", 12);
-			return (0);
-		}
-		pid = pid * 10 + (*str - '0');
-		str++;
+		buffer[len++] = (temp % 10) + '0';
+		temp /= 10;
 	}
-	return (pid);
+	while (len)
+		write(1, &buffer[--len], 1);
+	write(1, "\n", 1);
 }
 
-static void send_message(int pid, char *str)
+int	handle_client_signal(int signal, int *client_pid)
 {
-	int i;
-	char c;
-	while (*str)
+	static int	bit = 32;
+
+	if (bit == 0)
+		return (1);
+	if (signal == SIGUSR1)
+		*client_pid =  *client_pid | (1 << bit);
+	bit--;
+	if (bit == 0)
 	{
-		c = *str;
-		i = 0;
-		while (i < 7)
-		{
-			if (c & (1 << i))
-			{
-				if (kill(pid, SIGUSR1) == -1)
-				{
-					write(1, "Failed to send signal\n", 22);
-					return ;
-				}
-			}
-			else
-			{
-				if (kill(pid, SIGUSR2) == -1)
-				{
-					write(1, "Failed to send signal\n", 22);
-					return ;
-				}
-			}
-			usleep(100);
-			i++;
-		}
-		str++;
+		bit = 32;
+		return (1);
+	}
+	return (0);
+}
+
+void	handle_signal(int signal)
+{
+	static int	client_pid = 0;
+
+	if (handle_client_signal(signal, &client_pid))
+	{
+		// client e selam yollamalıyım testingen doğru - li kısımlarıa bakıcam
+		print_pid(client_pid);
 	}
 }
 
-int main(int ac, char **av)
+int	main(void)
 {
-	if (ac < 2)
-		return (0);
 	int pid;
 
-	pid = get_client_pid(av[1]);
-	if (pid)
-		send_message(pid, av[2]);
-	return (0);
+	pid = getpid();
+	print_pid(pid);
+	signal(SIGUSR1, handle_signal);
+	signal(SIGUSR2, handle_signal);
+	while (1)
+		pause();
 }

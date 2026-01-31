@@ -1,76 +1,77 @@
-#include <unistd.h>
 #include <signal.h>
+#include <unistd.h>
 
-void    handle_server_pid(int signum, int *server_pid)
+int	ft_atoi(char *str)
 {
-    int i = 0;
-    static int bit = 0;
+	int	index;
 
-    if (signum == SIGUSR1)
-        i = i | (1 << bit);
-    bit++;
-    if (bit == 32)
-    {
-        server_pid = i;
-        bit = 0;
-        i = 0;
-        char msg[] = "Server PID received\n";
-        write(1, msg, sizeof(msg) - 1);
-    }
+	index = 0;
+	while (*str)
+	{
+		index = index * 10 + (*str - '0');
+		str++;
+	}
+	return (index);
 }
 
- void sig_handler(int signum)
+void    send_client_pid(int client_pid, int server_pid)
 {
-    
-    static int bit = 0;
-    static char c = 0;
-    static int server_pid = 0;
-    
+    int pid_byte;
 
-    handle_server_pid(signum, &server_pid);
-    if (server_pid)
+    pid_byte = 32;
+    while (pid_byte)
     {
-        /* code */
+        if (client_pid & (1 << pid_byte))
+        {
+            if (kill(server_pid, SIGUSR1))
+            {
+                write(2, "hata", 5);   
+                return;
+            }
+        }
+        else if (kill(server_pid, SIGUSR2))
+        {
+            write(2, "hata", 5);   
+            return;
+        }
+        usleep(10000);
+        pid_byte--;
     }
     
-    if (signum == SIGUSR1)
-        c = c | (1 << bit);
-    bit++;
-    if (bit == 7)
-    {
-        write(1, &c, 1);
-        bit = 0;
-        c = 0;
-    }
 }
 
-void    print_pid()
-{
-    int pid;
 
-    pid = getpid();
-    write(1, "PID: ", 5);
-    char buffer[20];
-    int len = 0;
-    int temp = pid;
-    while (temp)
-    {
-        buffer[len++] = (temp % 10) + '0';
-        temp /= 10;
-    }
-    while (len)
-        write(1, &buffer[--len], 1);
-    write(1, "\n", 1);  
+void	print_pid(int pid)
+{
+	char	buffer[20];
+	int		len;
+	int		temp;
+
+	write(1, "PID: ", 5);
+	len = 0;
+	temp = pid;
+	while (temp)
+	{
+		buffer[len++] = (temp % 10) + '0';
+		temp /= 10;
+	}
+	while (len)
+		write(1, &buffer[--len], 1);
+	write(1, "\n", 1);
 }
 
-int main(int ac, char **av)
+int	main(int ac, char **av)
 {
-    if (ac != 1)
-        return (0);
-    print_pid();
-    signal(SIGUSR1, sig_handler);
-    signal(SIGUSR2, sig_handler);
-    while (1)
-        ;
-    return (0);
+	int server_pid;
+	
+    server_pid = ft_atoi(av[1]);
+
+    print_pid(getpid());
+    if (ac != 3)
+	{
+		write(2, "Argümanları", 15);
+        return (1);
+    }
+    send_client_pid(getpid(), server_pid);
+	return (0);
 }
