@@ -1,23 +1,7 @@
 #include <signal.h>
 #include <unistd.h>
 
-void	handle_message(int signal, int *client_pid)
-{
-	static char	bit = 8;
-	static char byte = 0;
-
-	if (signal == SIGUSR1)
-		byte =  byte | (1 << bit);
-	bit--;
-	if (bit == 0)
-	{
-		bit = 8;
-		write(1, &byte, 1);
-		if (byte == 0)
-			*client_pid = 0;
-		byte = 0;
-	}
-}
+static int	g_client_pid = 0;
 
 void	print_pid(int pid)
 {
@@ -38,49 +22,63 @@ void	print_pid(int pid)
 	write(1, "\n", 1);
 }
 
-int	handle_client_signal(int signal, int *client_pid)
+void	receive_pid(int sig)
 {
 	static int	bit = 32;
+	static int	pid = 0;
 
-	if (bit == 0)
-		return (1);
-	if (signal == SIGUSR1)
-		*client_pid =  *client_pid | (1 << bit);
 	bit--;
+	if (sig == SIGUSR1)
+		pid = pid | (1 << bit);
 	if (bit == 0)
 	{
+		g_client_pid = pid;
+		pid = 0;
 		bit = 32;
-		return (1);
+		print_pid(g_client_pid);
+		kill(g_client_pid, SIGUSR1);
 	}
-	return (0);
 }
 
-void	hand_shake(int client_pid)
+void	receive_msg(int sig)
 {
-	kill(SIGUSR1, client_pid);
-}
+	static int				msg_bit = 8;
+	static unsigned char	byte = 0;
 
-void	handle_signal(int signal)
-{
-	static int	client_pid = 0;
-
-	if (handle_client_signal(signal, &client_pid))
+	msg_bit--;
+	if (sig == SIGUSR1)
+		byte = byte | (1 << msg_bit);
+	if (msg_bit == 0)
 	{
-		// client e selam yollamalıyım testingen doğru - li kısımlarıa bakıcam
-		print_pid(client_pid);
-		handle_message(signal, &client_pid);
-		hand_shake(client_pid);
+		if (byte == '\0')
+		{
+			write(1, "\n", 1);
+			kill(g_client_pid, SIGUSR1);
+			g_client_pid = 0;
+			byte = 0;
+			msg_bit = 8;
+			return ;
+		}
+		write(1, &byte, 1);
+		byte = 0;
+		msg_bit = 8;
 	}
+	kill(g_client_pid, SIGUSR1);
+}
+
+void	handle_signal(int sig)
+{
+	if (g_client_pid == 0)
+		receive_pid(sig);
+	else
+		receive_msg(sig);
 }
 
 int	main(void)
 {
-	int pid;
-
-	pid = getpid();
-	print_pid(pid);
+	print_pid(getpid());
 	signal(SIGUSR1, handle_signal);
 	signal(SIGUSR2, handle_signal);
 	while (1)
-		pause();
+		;
 }
