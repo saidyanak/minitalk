@@ -59,13 +59,13 @@ void	send_message(char *message, int server_pid)
 		message++;
 	}
 	i = 8;
-	while (i > 0)
+	while (--i > 0)
 	{
 		kill(server_pid, SIGUSR2);
+		g_flag = 0;
 		while (!g_flag)
 				pause();
 	}
-	
 }
 
 int	main(int ac, char **av)
