@@ -2,54 +2,54 @@
 
 # Minitalk
 
-## Aciklama
+## Description
 
-Minitalk, Unix sinyalleri (`SIGUSR1` ve `SIGUSR2`) kullanarak iki proses arasinda iletisim kuran bir projedir. Proje iki programdan olusur: **server** ve **client**. Client, server'a bir metin mesaji gonderir; server bu mesaji sinyal sinyal alip terminale yazdirir. Tum iletisim yalnizca iki sinyal uzerinden, bit bit gerceklestirilir.
+Minitalk is a project that establishes communication between two processes using Unix signals (`SIGUSR1` and `SIGUSR2`). The project consists of two programs: **server** and **client**. The client sends a text message to the server, and the server receives it signal by signal, reconstructing and printing it to the terminal. All communication is carried out bit by bit using only two signals.
 
-### Proje Amaci
+### Project Goals
 
-- Unix sinyallerinin (`SIGUSR1`, `SIGUSR2`) nasil calistigini anlamak
-- Prosesler arasi iletisimi (IPC - Inter-Process Communication) uygulamali olarak ogrenmek
-- Bitwise (bit duzeyinde) islemleri kullanarak veri iletimi gerceklestirmek
+- Understand how Unix signals (`SIGUSR1`, `SIGUSR2`) work
+- Apply Inter-Process Communication (IPC) in practice
+- Implement data transmission using bitwise operations
 
-## Nasil Calisiyor?
+## How It Works
 
-### Genel Iletisim Akisi
+### Communication Flow Overview
 
 ```
 CLIENT                                    SERVER
 ======                                    ======
   |                                         |
-  |<-- 32 bit PID gonderimi (SIGUSR1/2) --->|  (Handshake)
+  |<-- 32 bit PID transmission (SIGUSR1/2) --->|  (Handshake)
   |                                         |
-  |<-- 8 bit karakter gonderimi ----------->|  (Mesaj)
-  |<-- SIGUSR1 (onay) --------------------->|  (Her bit icin ACK)
+  |<-- 8 bit character transmission ------->|  (Message)
+  |<-- SIGUSR1 (acknowledgment) ----------->|  (ACK per bit)
   |                                         |
-  |<-- 8 bit NULL byte (0x00) ------------->|  (Mesaj sonu)
-  |<-- SIGUSR1 (son onay) ----------------->|
+  |<-- 8 bit NULL byte (0x00) ------------->|  (End of message)
+  |<-- SIGUSR1 (final acknowledgment) ----->|
   |                                         |
-CIKIS                               BEKLEMEYE DEVAM
+EXIT                                CONTINUE WAITING
 ```
 
-### 1. Sinyal-Bit Eslemesi
+### 1. Signal-Bit Mapping
 
-| Sinyal   | Anlami    |
+| Signal   | Meaning   |
 |----------|-----------|
 | SIGUSR1  | Bit `1`   |
 | SIGUSR2  | Bit `0`   |
 
-Her karakter 8 bit olarak, her bit tek bir sinyal ile iletilir. Ornegin `A` harfi (ASCII 65, binary `01000001`) icin sirasi ile `SIGUSR2, SIGUSR1, SIGUSR2, SIGUSR2, SIGUSR2, SIGUSR2, SIGUSR2, SIGUSR1` sinyalleri gonderilir.
+Each character is transmitted as 8 bits, with each bit sent as a single signal. For example, the letter `A` (ASCII 65, binary `01000001`) is sent as the sequence `SIGUSR2, SIGUSR1, SIGUSR2, SIGUSR2, SIGUSR2, SIGUSR2, SIGUSR2, SIGUSR1`.
 
-### 2. Client PID Gonderimi (Handshake)
+### 2. Client PID Transmission (Handshake)
 
-Client, mesaj gondermeye baslamadan once kendi PID'sini server'a bildirir. Boylece server, onay sinyallerini dogru prosese gonderebilir.
+Before sending the message, the client transmits its own PID to the server. This allows the server to send acknowledgment signals back to the correct process.
 
-- Client PID'si 32 bit olarak MSB'den (en anlamli bit) LSB'ye dogru gonderilir
-- Her bit arasinda `usleep(20)` ile 20 mikrosaniye beklenir
-- Bu asamada server'dan onay beklenmez (asenkron)
+- The client PID is sent as 32 bits from MSB (most significant bit) to LSB
+- A 20-microsecond delay (`usleep(20)`) is used between each bit
+- No acknowledgment is expected from the server during this phase (asynchronous)
 
 ```c
-// client.c - PID gonderimi
+// client.c - PID transmission
 void send_client_pid(int client_pid, int server_pid)
 {
     int bit = 32;
@@ -64,10 +64,10 @@ void send_client_pid(int client_pid, int server_pid)
 }
 ```
 
-Server tarafinda `receive_pid()` fonksiyonu gelen her sinyali biriktirerek 32 bit tamamlandiginda PID'yi global degiskene yazar:
+On the server side, `receive_pid()` accumulates each incoming signal and writes the PID to a global variable once all 32 bits are received:
 
 ```c
-// server.c - PID alma
+// server.c - PID reception
 void receive_pid(int sig)
 {
     static int bit = 32;
@@ -75,29 +75,29 @@ void receive_pid(int sig)
 
     bit--;
     if (sig == SIGUSR1)
-        pid = pid | (1 << bit);    // ilgili bit'i 1 yap
+        pid = pid | (1 << bit);    // set the corresponding bit to 1
     if (bit == 0)
     {
-        g_client_pid = pid;        // PID tamamlandi
+        g_client_pid = pid;        // PID complete
         pid = 0;
         bit = 32;
-        kill(g_client_pid, SIGUSR1); // onay gonder
+        kill(g_client_pid, SIGUSR1); // send acknowledgment
     }
 }
 ```
 
-### 3. Mesaj Iletimi (Bit Bit)
+### 3. Message Transmission (Bit by Bit)
 
-PID gonderimi tamamlandiktan sonra client, mesajdaki her karakteri 8 bit olarak gonderir:
+After the PID handshake is complete, the client sends each character of the message as 8 bits:
 
-- Her bit gonderildikten sonra client, server'dan onay sinyali (`SIGUSR1`) bekler
-- Client, `g_flag` degiskeni uzerinden busy-wait yaparak senkronizasyon saglar
-- Server her bit'i aldiktan sonra `SIGUSR1` ile onay doner
-- 8 bit tamamlandiginda server, byte'i karakter olarak terminale yazdirir
-- Null byte (`0x00`) alindiginda mesaj tamamlanmis sayilir ve satir sonu basilir
+- After each bit is sent, the client waits for an acknowledgment signal (`SIGUSR1`) from the server
+- The client synchronizes via busy-wait using the `g_flag` variable
+- The server responds with `SIGUSR1` after receiving each bit
+- Once 8 bits are complete, the server prints the reconstructed character to the terminal
+- When a null byte (`0x00`) is received, the message is considered complete and a newline is printed
 
 ```c
-// client.c - Byte gonderimi
+// client.c - Byte transmission
 void send_byte(char byte, int server_pid)
 {
     int i = 8;
@@ -108,97 +108,97 @@ void send_byte(char byte, int server_pid)
             kill(server_pid, SIGUSR1);
         else
             kill(server_pid, SIGUSR2);
-        while (!g_flag)        // server onay verene kadar bekle
+        while (!g_flag)        // wait until server acknowledges
             ;
     }
 }
 ```
 
-### 4. Server Sinyal Yonlendirmesi
+### 4. Server Signal Routing
 
-Server, gelen sinyalleri duruma gore dogru fonksiyona yonlendirir:
+The server routes incoming signals to the appropriate handler based on the current state:
 
 ```c
 void handle_signal(int sig)
 {
     if (g_client_pid == 0)
-        receive_pid(sig);     // henuz PID alinmadi -> handshake
+        receive_pid(sig);     // PID not yet received -> handshake
     else
-        receive_msg(sig);     // PID alindi -> mesaj al
+        receive_msg(sig);     // PID received -> receive message
 }
 ```
 
-## Talimatlar
+## Instructions
 
-### Derleme
+### Compilation
 
 ```bash
-make        # server ve client derlenir
-make clean  # calistirilabilir dosyalar silinir
-make fclean # clean ile ayni
-make re     # temiz yeniden derleme
+make        # compiles both server and client
+make clean  # removes executables
+make fclean # same as clean
+make re     # clean rebuild
 ```
 
-Derleme `cc` derleyicisi ile `-Wall -Wextra -Werror` bayraklari kullanilarak yapilir.
+Compiled using the `cc` compiler with `-Wall -Wextra -Werror` flags.
 
-### Calistirma
+### Running
 
-**1. Adim:** Server'i baslatin:
+**Step 1:** Start the server:
 
 ```bash
 ./server
 ```
 
-Cikti olarak server'in PID'si goruntulenir:
+The server's PID is displayed as output:
 
 ```
 PID: 12345
 ```
 
-**2. Adim:** Baska bir terminal acin ve client ile mesaj gonderin:
+**Step 2:** Open another terminal and send a message using the client:
 
 ```bash
-./client 12345 "Merhaba Dunya"
+./client 12345 "Hello World"
 ```
 
-Server terminalinde mesaj goruntulenir:
+The message appears on the server terminal:
 
 ```
-Merhaba Dunya
+Hello World
 ```
 
-### Kullanim
+### Usage
 
 ```
 ./server
-./client <server_pid> <mesaj>
+./client <server_pid> <message>
 ```
 
-| Arguman       | Aciklama                          |
+| Argument      | Description                       |
 |---------------|-----------------------------------|
-| `server_pid`  | Server'in terminale yazdigi PID   |
-| `mesaj`       | Gonderilecek metin                |
+| `server_pid`  | The PID printed by the server     |
+| `message`     | The text to send                  |
 
-## Teknik Detaylar
+## Technical Details
 
-| Ozellik                  | Detay                                          |
-|--------------------------|------------------------------------------------|
-| Kullanilan sinyaller     | `SIGUSR1` (bit 1), `SIGUSR2` (bit 0)           |
-| PID iletimi              | 32 bit, MSB-first, 20us aralik, onaysiz        |
-| Mesaj iletimi            | 8 bit/karakter, MSB-first, her bit icin onay   |
-| Mesaj sonu isareti       | Null byte (`0x00`)                             |
-| Senkronizasyon           | Client: busy-wait, Server: sinyal tabanli      |
-| Mesaj uzunlugu siniri    | Yok (sistem kaynak limitlerine kadar)          |
-| Uyumluluk                | POSIX uyumlu (Linux/Unix)                      |
+| Property                 | Detail                                          |
+|--------------------------|-------------------------------------------------|
+| Signals used             | `SIGUSR1` (bit 1), `SIGUSR2` (bit 0)           |
+| PID transmission         | 32 bits, MSB-first, 20us interval, no ACK      |
+| Message transmission     | 8 bits/char, MSB-first, ACK per bit            |
+| End-of-message marker    | Null byte (`0x00`)                              |
+| Synchronization          | Client: busy-wait, Server: signal-based         |
+| Message length limit     | None (up to system resource limits)             |
+| Compatibility            | POSIX-compliant (Linux/Unix)                    |
 
-## Kaynaklar
+## Resources
 
-- [signal(7) - Linux Man Page](https://man7.org/linux/man-pages/man7/signal.7.html) - Unix sinyalleri hakkinda detayli dokumantasyon
-- [kill(2) - Linux Man Page](https://man7.org/linux/man-pages/man2/kill.2.html) - Prosese sinyal gonderme
-- [sigaction(2) - Linux Man Page](https://man7.org/linux/man-pages/man2/sigaction.2.html) - Sinyal isleyici tanimlama
-- [Bitwise Operators in C](https://en.wikipedia.org/wiki/Bitwise_operations_in_C) - C dilinde bitwise islemler
-- [Inter-Process Communication](https://en.wikipedia.org/wiki/Inter-process_communication) - Prosesler arasi iletisim yontemleri
+- [signal(7) - Linux Man Page](https://man7.org/linux/man-pages/man7/signal.7.html) - Detailed documentation on Unix signals
+- [kill(2) - Linux Man Page](https://man7.org/linux/man-pages/man2/kill.2.html) - Sending signals to processes
+- [sigaction(2) - Linux Man Page](https://man7.org/linux/man-pages/man2/sigaction.2.html) - Defining signal handlers
+- [Bitwise Operators in C](https://en.wikipedia.org/wiki/Bitwise_operations_in_C) - Bitwise operations in C
+- [Inter-Process Communication](https://en.wikipedia.org/wiki/Inter-process_communication) - IPC methods overview
 
-### Yapay Zeka Kullanimi
+### AI Usage
 
-Bu projede yapay zeka (AI) araclari kodlama asamasinda kullanilmamistir. README dokumantasyonunun duzenlenmesinde AI destegi alinmistir.
+AI tools were not used during the coding phase of this project. AI assistance was used for formatting the README documentation.
