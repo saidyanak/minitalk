@@ -6,7 +6,7 @@
 /*   By: syanak <syanak@student.42kocaeli.com.tr    +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/02/02 10:34:34 by syanak            #+#    #+#             */
-/*   Updated: 2026/02/02 11:11:20 by syanak           ###   ########.fr       */
+/*   Updated: 2026/02/02 13:11:05 by syanak           ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -20,6 +20,8 @@ int	ft_atoi(char *str)
 	int	result;
 
 	result = 0;
+	if (*str == '-')
+		return (0);
 	while (*str)
 	{
 		result = result * 10 + (*str - '0');
@@ -54,9 +56,10 @@ int	send_client_pid(int client_pid, int server_pid)
 		}
 		usleep(20);
 	}
+	return (0);
 }
 
-void	send_byte(char byte, int server_pid)
+int	send_byte(char byte, int server_pid)
 {
 	int	i;
 
@@ -78,6 +81,7 @@ void	send_byte(char byte, int server_pid)
 		while (!g_flag)
 			;
 	}
+	return (0);
 }
 
 int	main(int ac, char **av)
@@ -94,11 +98,15 @@ int	main(int ac, char **av)
 	signal(SIGUSR1, handle_signal);
 	signal(SIGUSR2, handle_signal);
 	server_pid = ft_atoi(av[1]);
+	if (server_pid == 0)
+		return (1);
 	g_flag = 0;
-	send_client_pid(getpid(), server_pid);
+	if (send_client_pid(getpid(), server_pid))
+		return (1);
 	while (av[2][i])
 	{
-		send_byte(av[2][i], server_pid);
+		if (send_byte(av[2][i], server_pid))
+			return (1);
 		i++;
 	}
 	send_byte(0, server_pid);
